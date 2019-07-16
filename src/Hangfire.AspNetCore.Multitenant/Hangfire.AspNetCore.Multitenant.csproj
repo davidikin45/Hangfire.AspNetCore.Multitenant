@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Authors>David Ikin</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/davidikin45/Hangfire.AspNetCore.Multitenant</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/davidikin45/Hangfire.AspNetCore.Multitenant</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>Hangfire Multitenant</PackageTags>
+    <Copyright>(c) David Ikin</Copyright>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="AspNetCoreMultiTenantDashboardMiddleware.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Autofac.AspNetCore.Multitenant" Version="1.1.0" />
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.7.4" />
+    <PackageReference Include="Hangfire.Initialization" Version="1.0.27" />
+    <PackageReference Include="Hangfire.MemoryStorage" Version="1.6.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Routing" Version="2.2.2" />
+  </ItemGroup>
+
+</Project>
