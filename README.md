@@ -54,13 +54,14 @@ public class HangfireTenantsStore : HangfireTenantsInMemoryStore
 		var tenantsStore = _serviceProvider.GetRequiredService<IHangfireTenantsStore>();
 		var tenantConfigurations = _serviceProvider.GetServices<IHangfireTenantConfiguration>();
 
-		var actionBuilder = new ConfigurationActionBuilder();
-
 		var tenantInitializer = tenantConfigurations.FirstOrDefault(i => i.TenantId.ToString() == tenant.Id);
+
+		var actionBuilder = new ConfigurationActionBuilder();
+		var services = new ServiceCollection();
 
 		if (tenantInitializer != null)
 		{
-			tenantInitializer.ConfigureServices(actionBuilder, configuration, environment);
+			tenantInitializer.ConfigureServices(services, configuration, environment);
 		}
 
 		if (tenant.HangfireConnectionString != null)
@@ -74,15 +75,20 @@ public class HangfireTenantsStore : HangfireTenantsInMemoryStore
 				tenantInitializer.ConfigureHangfireJobs(serverDetails.recurringJobManager, configuration, environment);
 			}
 
-			actionBuilder.Add(b => b.RegisterInstance(serverDetails.recurringJobManager).As<IRecurringJobManager>().SingleInstance());
-			actionBuilder.Add(b => b.RegisterInstance(serverDetails.backgroundJobClient).As<IBackgroundJobClient>().SingleInstance());
+			services.AddSingleton(serverDetails.recurringJobManager);
+			services.AddSingleton(serverDetails.backgroundJobClient);
+			//actionBuilder.Add(b => b.RegisterInstance(serverDetails.recurringJobManager).As<IRecurringJobManager>().SingleInstance());
+			//actionBuilder.Add(b => b.RegisterInstance(serverDetails.backgroundJobClient).As<IBackgroundJobClient>().SingleInstance());
 		}
 		else
 		{
-			actionBuilder.Add(b => b.RegisterInstance<IRecurringJobManager>(null).As<IRecurringJobManager>().SingleInstance());
-			actionBuilder.Add(b => b.RegisterInstance<IBackgroundJobClient>(null).As<IBackgroundJobClient>().SingleInstance());
+			services.AddSingleton<IRecurringJobManager>(sp => null);
+			services.AddSingleton<IBackgroundJobClient>(sp => null);
+			//actionBuilder.Add(b => b.RegisterInstance<IRecurringJobManager>(null).As<IRecurringJobManager>().SingleInstance());
+			//actionBuilder.Add(b => b.RegisterInstance<IBackgroundJobClient>(null).As<IBackgroundJobClient>().SingleInstance());
 		}
 
+		actionBuilder.Add(b => b.Populate(services));
 		multitenantContainer.ConfigureTenant(tenant.Id, actionBuilder.Build());
 	}
 
@@ -103,6 +109,32 @@ public class HangfireTenantsStore : HangfireTenantsInMemoryStore
 	//127.0.0.1 tenant8.localhost
 	//127.0.0.1 tenant9.localhost
 	//127.0.0.1 tenant10.localhost
+}
+```
+
+```
+public class Configuration : IHangfireTenantConfiguration
+{
+	public object TenantId => "default";
+
+	public void ConfigureHangfireJobs(IRecurringJobManager recurringJobManager, IConfiguration configuration, IHostingEnvironment hostingEnvironment)
+	{
+		recurringJobManager.AddOrUpdate("check-link", Job.FromExpression<Job1>(m => m.Execute()), Cron.Minutely(), new RecurringJobOptions());
+		recurringJobManager.Trigger("check-link");
+	}
+
+	public void ConfigureServices(IServiceCollection services, IConfiguration configuration, IHostingEnvironment hostingEnvironment)
+	{
+		
+	}
+}
+
+public class Job1
+{
+	public void Execute()
+	{
+
+	}
 }
 ```
 
@@ -134,12 +166,12 @@ public class Program
 
 	public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
 		WebHost.CreateDefaultBuilder(args)
-			.ConfigureServices(services =>
-			{
-				services.AddHttpContextAccessor();
-			})
-			.UseAutofacMultiTenant()
-			.UseStartup<Startup>();
+		.ConfigureServices(services =>
+		{
+			services.AddHttpContextAccessor();
+		})
+		.UseAutofacMultiTenant()
+		.UseStartup<Startup>();
 }
 ```
 

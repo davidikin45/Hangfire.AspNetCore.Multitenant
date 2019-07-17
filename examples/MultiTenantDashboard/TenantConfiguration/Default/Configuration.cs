@@ -4,6 +4,7 @@ using Hangfire.AspNetCore.Multitenant;
 using Hangfire.Common;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MultiTenantDashboard.TenantConfiguration.Default
 {
@@ -17,9 +18,9 @@ namespace MultiTenantDashboard.TenantConfiguration.Default
             recurringJobManager.Trigger("check-link");
         }
 
-        public void ConfigureServices(ConfigurationActionBuilder services, IConfiguration configuration, IHostingEnvironment hostingEnvironment)
+        public void ConfigureServices(IServiceCollection services, IConfiguration configuration, IHostingEnvironment hostingEnvironment)
         {
-           
+            
         }
     }
 }

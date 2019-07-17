@@ -1,4 +1,5 @@
 ﻿using Autofac;
+using Autofac.Extensions.DependencyInjection;
 using Autofac.Multitenant;
 using Hangfire;
 using Hangfire.AspNetCore.Multitenant;
@@ -53,13 +54,14 @@ namespace MultiTenantDashboard
             var tenantsStore = _serviceProvider.GetRequiredService<IHangfireTenantsStore>();
             var tenantConfigurations = _serviceProvider.GetServices<IHangfireTenantConfiguration>();
 
-            var actionBuilder = new ConfigurationActionBuilder();
-
             var tenantInitializer = tenantConfigurations.FirstOrDefault(i => i.TenantId.ToString() == tenant.Id);
+
+            var actionBuilder = new ConfigurationActionBuilder();
+            var services = new ServiceCollection();
 
             if (tenantInitializer != null)
             {
-                tenantInitializer.ConfigureServices(actionBuilder, configuration, environment);
+                tenantInitializer.ConfigureServices(services, configuration, environment);
             }
 
             if (tenant.HangfireConnectionString != null)
@@ -73,15 +75,20 @@ namespace MultiTenantDashboard
                     tenantInitializer.ConfigureHangfireJobs(serverDetails.recurringJobManager, configuration, environment);
                 }
 
-                actionBuilder.Add(b => b.RegisterInstance(serverDetails.recurringJobManager).As<IRecurringJobManager>().SingleInstance());
-                actionBuilder.Add(b => b.RegisterInstance(serverDetails.backgroundJobClient).As<IBackgroundJobClient>().SingleInstance());
+                services.AddSingleton(serverDetails.recurringJobManager);
+                services.AddSingleton(serverDetails.backgroundJobClient);
+                //actionBuilder.Add(b => b.RegisterInstance(serverDetails.recurringJobManager).As<IRecurringJobManager>().SingleInstance());
+                //actionBuilder.Add(b => b.RegisterInstance(serverDetails.backgroundJobClient).As<IBackgroundJobClient>().SingleInstance());
             }
             else
             {
-                actionBuilder.Add(b => b.RegisterInstance<IRecurringJobManager>(null).As<IRecurringJobManager>().SingleInstance());
-                actionBuilder.Add(b => b.RegisterInstance<IBackgroundJobClient>(null).As<IBackgroundJobClient>().SingleInstance());
+                services.AddSingleton<IRecurringJobManager>(sp => null);
+                services.AddSingleton<IBackgroundJobClient>(sp => null);
+                //actionBuilder.Add(b => b.RegisterInstance<IRecurringJobManager>(null).As<IRecurringJobManager>().SingleInstance());
+                //actionBuilder.Add(b => b.RegisterInstance<IBackgroundJobClient>(null).As<IBackgroundJobClient>().SingleInstance());
             }
 
+            actionBuilder.Add(b => b.Populate(services));
             multitenantContainer.ConfigureTenant(tenant.Id, actionBuilder.Build());
         }
 
