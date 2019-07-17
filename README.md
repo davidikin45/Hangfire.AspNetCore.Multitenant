@@ -115,6 +115,10 @@ public class Program
 
 	public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
 		WebHost.CreateDefaultBuilder(args)
+			.ConfigureServices(services =>
+			{
+				services.AddHttpContextAccessor();
+			})
 			.UseAutofacMultiTenant()
 			.UseStartup<Startup>();
 }
@@ -146,8 +150,6 @@ public class Program
 		services.AddHangfireMultiTenantStore<HangfireTenantsStore>();
 		services.AddHangfireTenantRequestIdentification().TenantFromHostQueryStringSourceIP();
 		services.AddHangfireTenantConfiguration();
-
-		services.AddHttpContextAccessor();
 
 		services.AddHangfire(config => {
 			config.UseFilter(new HangfireLoggerAttribute());
@@ -218,3 +220,4 @@ This project is licensed under the MIT License
 
 * [Autofac Multitenant](https://autofaccn.readthedocs.io/en/latest/advanced/multitenant.html)
 * [Writing Multitenant ASP.NET Core Applications](https://stackify.com/writing-multitenant-asp-net-core-applications/)
+* [Queue per Microservice][https://discuss.hangfire.io/t/one-queue-for-the-whole-farm-and-one-queue-by-server/490/2]

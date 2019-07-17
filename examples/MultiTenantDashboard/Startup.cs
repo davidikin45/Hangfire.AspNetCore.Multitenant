@@ -1,5 +1,10 @@
-﻿using Hangfire;
+﻿using Autofac;
+using Hangfire;
 using Hangfire.AspNetCore.Multitenant;
+using Hangfire.AspNetCore.Multitenant.Data;
+using Hangfire.AspNetCore.Multitenant.Request;
+using Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies;
+using Hangfire.Initialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -7,11 +12,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Hangfire.AspNetCore.Multitenant.Request;
-using Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies;
-using Hangfire.AspNetCore.Multitenant.Data;
-using Autofac;
-using AspNetCore.Base.Hangfire;
 
 namespace MultiTenantDashboard
 {
@@ -40,8 +40,6 @@ namespace MultiTenantDashboard
             services.AddHangfireMultiTenantStore<HangfireTenantsStore>();
             services.AddHangfireTenantRequestIdentification().TenantFromHostQueryStringSourceIP();
             services.AddHangfireTenantConfiguration();
-
-            services.AddHttpContextAccessor();
 
             services.AddHangfire(config => {
                 config.UseFilter(new HangfireLoggerAttribute());

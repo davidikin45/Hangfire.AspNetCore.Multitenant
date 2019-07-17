@@ -1,4 +1,5 @@
 ﻿using Autofac;
+using Autofac.AspNetCore.Extensions;
 using Autofac.Multitenant;
 using Hangfire;
 using Hangfire.AspNetCore.Multitenant;
@@ -80,6 +81,10 @@ namespace MultiTenantDashboard
 
         public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
             WebHost.CreateDefaultBuilder(args)
+                .ConfigureServices(services =>
+                {
+                    services.AddHttpContextAccessor();
+                })
                 .UseAutofacMultiTenant()
                 .UseStartup<Startup>();
     }
