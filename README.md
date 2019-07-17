@@ -15,9 +15,17 @@ PM> Install-Package Hangfire.AspNetCore.MultiTenant
 
 ## Example
 ```
- public class HangfireTenantsStore : HangfireTenantsInMemoryStore
+public class HangfireTenantsStore : HangfireTenantsInMemoryStore
 {
-	public HangfireTenantsStore()
+	
+	private readonly IServiceProvider _serviceProvider;
+	public HangfireTenantsStore(IServiceProvider serviceProvider)
+	{
+		_serviceProvider = serviceProvider;
+		CacheExpiryMinutes = 1;
+	}
+
+	public override async Task InitializeTenantsAsync()
 	{
 		Tenants = new List<HangfireTenant>(){
 			new HangfireTenant(){ Id ="default", HostNames = new string []{ "*" }, HangfireConnectionString = "", DashboardOptions = new DashboardOptions{ Authorization = new[] { new HangfireRoleAuthorizationfilter("admin") }} },
@@ -32,6 +40,56 @@ PM> Install-Package Hangfire.AspNetCore.MultiTenant
 			new HangfireTenant(){ Id ="tenant9", HostNames = new string []{ "tenant9.*" }, HangfireConnectionString = "", DashboardOptions = new DashboardOptions{ Authorization = new[] { new HangfireRoleAuthorizationfilter("admin") }} } ,
 			new HangfireTenant(){ Id ="tenant10", HostNames = new string []{ "tenant10.*" }, HangfireConnectionString = "", DashboardOptions = new DashboardOptions{ Authorization = new[] { new HangfireRoleAuthorizationfilter("admin") }} },
 		};
+
+		await base.InitializeTenantsAsync();
+	}
+
+	public override void OnTenantAdded(HangfireTenant tenant)
+	{
+		var multitenantContainer = _serviceProvider.GetRequiredService<MultitenantContainer>();
+		var configuration = _serviceProvider.GetRequiredService<IConfiguration>();
+		var environment = _serviceProvider.GetRequiredService<IHostingEnvironment>();
+		var applicationLifetime = _serviceProvider.GetRequiredService<IApplicationLifetime>();
+
+		var tenantsStore = _serviceProvider.GetRequiredService<IHangfireTenantsStore>();
+		var tenantConfigurations = _serviceProvider.GetServices<IHangfireTenantConfiguration>();
+
+		var actionBuilder = new ConfigurationActionBuilder();
+
+		var tenantInitializer = tenantConfigurations.FirstOrDefault(i => i.TenantId.ToString() == tenant.Id);
+
+		if (tenantInitializer != null)
+		{
+			tenantInitializer.ConfigureServices(actionBuilder, configuration, environment);
+		}
+
+		if (tenant.HangfireConnectionString != null)
+		{
+			var serverDetails = HangfireMultiTenantLauncher.StartHangfireServer(tenant.Id, "web-background", tenant.HangfireConnectionString, multitenantContainer, options => { options.ApplicationLifetime = applicationLifetime; options.AdditionalProcesses = tenant.AdditionalProcesses; });
+
+			tenant.Storage = serverDetails.Storage;
+
+			if (tenantInitializer != null)
+			{
+				tenantInitializer.ConfigureHangfireJobs(serverDetails.recurringJobManager, configuration, environment);
+			}
+
+			actionBuilder.Add(b => b.RegisterInstance(serverDetails.recurringJobManager).As<IRecurringJobManager>().SingleInstance());
+			actionBuilder.Add(b => b.RegisterInstance(serverDetails.backgroundJobClient).As<IBackgroundJobClient>().SingleInstance());
+		}
+		else
+		{
+			actionBuilder.Add(b => b.RegisterInstance<IRecurringJobManager>(null).As<IRecurringJobManager>().SingleInstance());
+			actionBuilder.Add(b => b.RegisterInstance<IBackgroundJobClient>(null).As<IBackgroundJobClient>().SingleInstance());
+		}
+
+		multitenantContainer.ConfigureTenant(tenant.Id, actionBuilder.Build());
+	}
+
+	public override void OnTenantRemoved(HangfireTenant tenant)
+	{
+		var multitenantContainer = _serviceProvider.GetRequiredService<MultitenantContainer>();
+		multitenantContainer.RemoveTenant(tenant.Id);
 	}
 
 	//C:\WINDOWS\system32\drivers\etc\hosts
@@ -61,47 +119,8 @@ public class Program
 
 			try
 			{
-				var multitenantContainer = serviceProvider.GetRequiredService<MultitenantContainer>();
-				var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-				var environment = serviceProvider.GetRequiredService<IHostingEnvironment>();
-				var applicationLifetime = serviceProvider.GetRequiredService<IApplicationLifetime>();
-
-				var tenantsStore = serviceProvider.GetRequiredService<IHangfireTenantsStore>();
-				var tenantConfigurations = serviceProvider.GetServices<IHangfireTenantConfiguration>();
-
-				foreach (var tenant in (await tenantsStore.GetAllTenantsAsync()).ToList())
-				{
-					var actionBuilder = new ConfigurationActionBuilder();
-
-					var tenantInitializer = tenantConfigurations.FirstOrDefault(i => i.TenantId.ToString() == tenant.Id);
-
-					if (tenantInitializer != null)
-					{
-						tenantInitializer.ConfigureServices(actionBuilder, configuration, environment);
-					}
-
-					if (tenant.HangfireConnectionString != null)
-					{
-						var serverDetails = HangfireMultiTenantLauncher.StartHangfireServer(tenant.Id, "web-background", tenant.HangfireConnectionString, multitenantContainer, options => { options.ApplicationLifetime = applicationLifetime; options.AdditionalProcesses = tenant.AdditionalProcesses; });
-
-						tenant.Storage = serverDetails.Storage;
-
-						if (tenantInitializer != null)
-						{
-							tenantInitializer.ConfigureHangfireJobs(serverDetails.recurringJobManager, configuration, environment);
-						}
-
-						actionBuilder.Add(b => b.RegisterInstance(serverDetails.recurringJobManager).As<IRecurringJobManager>().SingleInstance());
-						actionBuilder.Add(b => b.RegisterInstance(serverDetails.backgroundJobClient).As<IBackgroundJobClient>().SingleInstance());
-					}
-					else
-					{
-						actionBuilder.Add(b => b.RegisterInstance<IRecurringJobManager>(null).As<IRecurringJobManager>().SingleInstance());
-						actionBuilder.Add(b => b.RegisterInstance<IBackgroundJobClient>(null).As<IBackgroundJobClient>().SingleInstance());
-					}
-
-					multitenantContainer.ConfigureTenant(tenant.Id, actionBuilder.Build());
-				}
+				var tenantStore = serviceProvider.GetRequiredService<IHangfireTenantsStore>();
+				await tenantStore.InitializeTenantsAsync();
 			}
 			catch (Exception ex)
 			{

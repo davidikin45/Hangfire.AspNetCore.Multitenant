@@ -9,6 +9,8 @@ namespace Hangfire.AspNetCore.Multitenant
         public string Id { get; set; }
         public string Name { get; set; }
 
+        public bool Active { get; set; } = true;
+
         public string[] RequestIpAddresses { get; set; }
         public string[] HostNames { get; set; }
         public string HangfireConnectionString { get; set; } = "";

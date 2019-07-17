@@ -4,19 +4,13 @@ using System.Threading.Tasks;
 
 namespace Hangfire.AspNetCore.Multitenant.Data
 {
-    public class HangfireTenantsInMemoryStore : IHangfireTenantsStore
+    public abstract class HangfireTenantsInMemoryStore : HangfireTenantsInMemoryCachingStore
     {
-        public List<HangfireTenant> Tenants = new List<HangfireTenant>();
+        public static List<HangfireTenant> Tenants { get; set; } = new List<HangfireTenant>();
 
-        public Task<IEnumerable<HangfireTenant>> GetAllTenantsAsync()
+        public override Task<IEnumerable<HangfireTenant>> GetAllActiveTenantsFromStoreAsync()
         {
-            return Task.FromResult(Tenants.ToList().OrderBy(t => t.Id).Cast<HangfireTenant>());
-        }
-
-        public Task<HangfireTenant> GetTenantByIdAsync(object id)
-        {
-            var tenant = Tenants.FirstOrDefault(t => t.Id == id.ToString());
-            return Task.FromResult(tenant);
+            return Task.FromResult(Tenants.Where(t => t.Active).OrderBy(t => t.Id).ToList().Cast<HangfireTenant>());
         }
     }
 }

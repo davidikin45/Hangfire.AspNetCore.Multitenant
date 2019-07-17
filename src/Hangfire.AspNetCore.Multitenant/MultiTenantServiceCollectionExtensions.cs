@@ -19,7 +19,7 @@ namespace Hangfire.AspNetCore.Multitenant
         /// <summary>
         /// Adds the hangfire multi tenant store to the application.
         /// </summary>
-        public static IServiceCollection AddHangfireMultiTenantStore<TTenantStore>(this IServiceCollection services, ServiceLifetime contextLifetime = ServiceLifetime.Singleton)
+        public static IServiceCollection AddHangfireMultiTenantStore<TTenantStore>(this IServiceCollection services, ServiceLifetime contextLifetime = ServiceLifetime.Scoped)
         where TTenantStore : class, IHangfireTenantsStore
         {
             services.Add(new ServiceDescriptor(typeof(IHangfireTenantsStore), typeof(TTenantStore), contextLifetime));
