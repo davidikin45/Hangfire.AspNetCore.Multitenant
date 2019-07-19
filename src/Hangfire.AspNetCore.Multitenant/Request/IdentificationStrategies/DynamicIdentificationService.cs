@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -8,13 +9,14 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
 {
     public sealed class DynamicTenantIdentificationService : IHangfireTenantIdentificationStrategy
     {
-        private readonly Func<HttpContext, HangfireTenant> _currentTenant;
-        private readonly Func<IEnumerable<HangfireTenant>> _allTenants;
+        private readonly Func<IHostingEnvironment, HttpContext, HangfireTenant> _currentTenant;
+        private readonly Func<IHostingEnvironment, IEnumerable<HangfireTenant>> _allTenants;
+        private readonly IHostingEnvironment _hostingEnvironment;
 
         private readonly ILogger<IHangfireTenantIdentificationStrategy> _logger;
         private readonly IHttpContextAccessor _contextAccessor;
 
-        public DynamicTenantIdentificationService(IHttpContextAccessor contextAccessor, ILogger<IHangfireTenantIdentificationStrategy> logger, Func<HttpContext, HangfireTenant> currentTenant, Func<IEnumerable<HangfireTenant>> allTenants)
+        public DynamicTenantIdentificationService(IHttpContextAccessor contextAccessor, IHostingEnvironment hostingEnvironment, ILogger<IHangfireTenantIdentificationStrategy> logger, Func<IHostingEnvironment, HttpContext, HangfireTenant> currentTenant, Func<IHostingEnvironment, IEnumerable<HangfireTenant>> allTenants)
         {
             if (currentTenant == null)
             {
@@ -26,6 +28,7 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
                 throw new ArgumentNullException(nameof(allTenants));
             }
             _contextAccessor = contextAccessor;
+            _hostingEnvironment = hostingEnvironment;
             _logger = logger;
 
             this._currentTenant = currentTenant;
@@ -36,12 +39,12 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
 
         public IEnumerable<HangfireTenant> GetAllTenants()
         {
-            return this._allTenants();
+            return this._allTenants(_hostingEnvironment);
         }
 
         public Task<HangfireTenant> GetTenantAsync(HttpContext httpContext)
         {
-            var tenant = this._currentTenant(httpContext);
+            var tenant = this._currentTenant(_hostingEnvironment, httpContext);
             TenantId = tenant?.Id;
 
             return Task.FromResult(tenant);

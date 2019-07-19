@@ -1,4 +1,5 @@
 ﻿using Hangfire.AspNetCore.Multitenant.Data;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System;
@@ -11,12 +12,14 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
     {
         private readonly ILogger<IHangfireTenantIdentificationStrategy> _logger;
         private readonly IHttpContextAccessor _contextAccessor;
+        private readonly IHostingEnvironment _hostingEnvironment;
         private readonly IHangfireTenantsStore _store;
 
-        public SourceIPIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, ILogger<IHangfireTenantIdentificationStrategy> logger)
+        public SourceIPIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, IHostingEnvironment hostingEnvironment, ILogger<IHangfireTenantIdentificationStrategy> logger)
         {
             _store = store;
             _contextAccessor = contextAccessor;
+            _hostingEnvironment = hostingEnvironment;
             _logger = logger;
         }
 
@@ -32,17 +35,17 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
             //origin
             var ip = httpContext.Connection.RemoteIpAddress.ToString();
 
-            Func<HangfireTenant, bool> whereClause = t => t.RequestIpAddresses != null && t.HostNames.Count() == 0
+            Func<HangfireTenant, bool> whereClause = t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).RequestIpAddresses != null && t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Count() == 0
             && (
-              t.RequestIpAddresses.Where(i => !i.Contains("*") || i.EndsWith("*")).Any(i => ip.StartsWith(i.Replace("*", "")))
-             || t.RequestIpAddresses.Where(i => i.StartsWith("*")).Any(i => ip.EndsWith(i.Replace("*", "")))
+              t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).RequestIpAddresses.Where(i => !i.Contains("*") || i.EndsWith("*")).Any(i => ip.StartsWith(i.Replace("*", "")))
+             || t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).RequestIpAddresses.Where(i => i.StartsWith("*")).Any(i => ip.EndsWith(i.Replace("*", "")))
              );
 
             var tenants = await _store.GetAllTenantsAsync();
 
             var filteredTenants = tenants.Where(whereClause).ToList();
 
-            var tenant = filteredTenants.OrderByDescending(t => t.RequestIpAddresses.Max(hn => hn.Length)).FirstOrDefault();
+            var tenant = filteredTenants.OrderByDescending(t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).RequestIpAddresses.Max(hn => hn.Length)).FirstOrDefault();
 
             if (tenant != null)
             {

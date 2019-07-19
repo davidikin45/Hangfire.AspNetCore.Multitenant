@@ -1,6 +1,7 @@
 ﻿using Hangfire.AspNetCore.Multitenant;
 using Hangfire.AspNetCore.Multitenant.Data;
 using Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
@@ -11,12 +12,14 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
     {
         private readonly ILogger<IHangfireTenantIdentificationStrategy> _logger;
         private readonly IHttpContextAccessor _contextAccessor;
+        private readonly IHostingEnvironment _hostingEnvironment;
         private readonly IHangfireTenantsStore _store;
 
-        public TenantHostQueryStringRequestIpIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, ILogger<IHangfireTenantIdentificationStrategy> logger)
+        public TenantHostQueryStringRequestIpIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, IHostingEnvironment hostingEnvironment, ILogger<IHangfireTenantIdentificationStrategy> logger)
         {
             _store = store;
             _contextAccessor = contextAccessor;
+            _hostingEnvironment = hostingEnvironment;
             _logger = logger;
         }
 
@@ -24,9 +27,10 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
 
         public async Task<HangfireTenant> GetTenantAsync(HttpContext httpContext)
         {
-            var hostIdentificationService = new HostIdentificationService(_store, _contextAccessor, _logger);
-            var queryStringIdentificationService = new QueryStringIdentificationService(_store, _contextAccessor, _logger);
-            var requestIpIdentificationService = new SourceIPIdentificationService(_store, _contextAccessor, _logger);
+
+            var hostIdentificationService = new HostIdentificationService(_store, _contextAccessor, _hostingEnvironment, _logger);
+            var queryStringIdentificationService = new QueryStringIdentificationService(_store, _contextAccessor, _hostingEnvironment, _logger);
+            var requestIpIdentificationService = new SourceIPIdentificationService(_store, _contextAccessor, _hostingEnvironment, _logger);
 
 
             var tenant = await queryStringIdentificationService.GetTenantAsync(httpContext);
@@ -61,6 +65,7 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
             var tenant = GetTenantAsync(httpContext).GetAwaiter().GetResult();
             if (tenant != null)
             {
+                TenantId = tenant.Id;
                 tenantId = tenant.Id;
                 return true;
             }

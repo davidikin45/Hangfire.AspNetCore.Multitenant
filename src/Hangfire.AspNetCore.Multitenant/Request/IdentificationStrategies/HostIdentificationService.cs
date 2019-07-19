@@ -1,4 +1,5 @@
 ﻿using Hangfire.AspNetCore.Multitenant.Data;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System;
@@ -11,12 +12,14 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
     {
         private readonly ILogger<IHangfireTenantIdentificationStrategy> _logger;
         private readonly IHttpContextAccessor _contextAccessor;
+        private readonly IHostingEnvironment _hostingEnvironment;
         private readonly IHangfireTenantsStore _store;
 
-        public HostIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, ILogger<IHangfireTenantIdentificationStrategy> logger)
+        public HostIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, IHostingEnvironment hostingEnvironment, ILogger<IHangfireTenantIdentificationStrategy> logger)
         {
             _store = store;
             _contextAccessor = contextAccessor;
+            _hostingEnvironment = hostingEnvironment;
             _logger = logger;
         }
 
@@ -32,20 +35,24 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
             //destination
             var host = httpContext.Request.Host.Value.Replace("www.","");
             var hostWithoutPort = host.Split(':')[0];
+            var subdomain = hostWithoutPort.Contains(".");
 
             //ip restriction security
             var ip = httpContext.Connection.RemoteIpAddress.ToString();
 
-            Func<HangfireTenant, bool> exactMatchHostWithPortCondition = t => t.HostNames.Contains(host);
-            Func<HangfireTenant, bool> exactMatchHostWithoutPortCondition = t => t.HostNames.Contains(hostWithoutPort);
-            Func<HangfireTenant, bool> endWildcardCondition = t => t.HostNames.Any(h => h.EndsWith("*") && host.StartsWith(h.Replace("*", "")));
-            Func<HangfireTenant, bool> startWildcardWithPortCondition = t => t.HostNames.Any(h => h.StartsWith("*") && host.EndsWith(h.Replace("*","")));
-            Func<HangfireTenant, bool> startWildcardCondition = t => t.HostNames.Any(h => h.StartsWith("*") && hostWithoutPort.EndsWith(h.Replace("*", "")));
+            Func<HangfireTenant, bool> exactMatchHostWithPortCondition = t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Contains(host);
+            Func<HangfireTenant, bool> exactMatchHostWithoutPortCondition = t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Contains(hostWithoutPort);
+            Func<HangfireTenant, bool> nonSubdomainCondition = t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Any(h => h == "") && !subdomain;
+            Func<HangfireTenant, bool> endWildcardCondition = t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Any(h => h.EndsWith("*") && host.StartsWith(h.Replace("*", "")));
+            Func<HangfireTenant, bool> startWildcardWithPortCondition = t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Any(h => h.StartsWith("*") && host.EndsWith(h.Replace("*","")));
+            Func<HangfireTenant, bool> startWildcardCondition = t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Any(h => h.StartsWith("*") && hostWithoutPort.EndsWith(h.Replace("*", "")));
 
             var tenants = await _store.GetAllTenantsAsync();
 
             var exactMatchHostWithPort = tenants.Where(exactMatchHostWithPortCondition).ToList();
             var exactMatchHostWithoutPort = tenants.Where(exactMatchHostWithoutPortCondition).ToList();
+            var nonSubdomain = tenants.Where(nonSubdomainCondition).ToList();
+
             var endWildcard = tenants.Where(endWildcardCondition).ToList();
             var startWildcardWithPort = tenants.Where(startWildcardWithPortCondition).ToList();
             var startWildcard = tenants.Where(startWildcardCondition).ToList();
@@ -65,22 +72,26 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
                     tenant = exactMatchHostWithoutPort.First();
                 }
             }
+            else if (nonSubdomain.Count > 0)
+            {
+                tenant = nonSubdomain.First();
+            }
             else if (endWildcard.Count > 0)
             {
-                tenant = endWildcard.OrderByDescending(t => t.HostNames.Max(hn => hn.Length)).First();
+                tenant = endWildcard.OrderByDescending(t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Max(hn => hn.Length)).First();
             }
             else if(startWildcardWithPort.Count > 0)
             {
-                tenant = startWildcardWithPort.OrderByDescending(t => t.HostNames.Max(hn => hn.Length)).First();
+                tenant = startWildcardWithPort.OrderByDescending(t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Max(hn => hn.Length)).First();
             }
             else if(startWildcard.Count > 0)
             {
-                tenant = startWildcard.OrderByDescending(t => t.HostNames.Max(hn => hn.Length)).First();
+                tenant = startWildcard.OrderByDescending(t => t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).HostNames.Max(hn => hn.Length)).First();
             }
 
             if (tenant != null)
             {
-                if(tenant.IpAddressAllowed(ip))
+                if(tenant.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).IpAddressAllowed(ip))
                 {
                     this._logger.LogInformation("Identified tenant: {tenant} from host: {host}", tenant.Id, host);
                     TenantId = tenant.Id;

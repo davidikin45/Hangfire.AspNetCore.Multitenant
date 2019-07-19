@@ -5,6 +5,7 @@ using Hangfire.AspNetCore.Multitenant.Data;
 using Hangfire.AspNetCore.Multitenant.Request;
 using Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies;
 using Hangfire.Initialization;
+using Hangfire.MemoryStorage;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -41,7 +42,19 @@ namespace MultiTenantDashboard
             services.AddHangfireTenantRequestIdentification().TenantFromHostQueryStringSourceIP();
             services.AddHangfireTenantConfiguration();
 
+            //Default dashboard options.
+            services.AddSingleton(new DashboardOptions()
+            {
+                Authorization = new[] { new HangfireRoleAuthorizationfilter("admin") }
+            });
+
+            //Default filter options.
             services.AddHangfire(config => {
+                config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings();
+
                 config.UseFilter(new HangfireLoggerAttribute());
                 config.UseFilter(new HangfirePreserveOriginalQueueAttribute());
             });
@@ -70,21 +83,7 @@ namespace MultiTenantDashboard
             app.UseStaticFiles();
             app.UseCookiePolicy();
 
-            app.UseHangfireDashboardMultiTenant("/hangfire", async (context) =>
-            {
-                var hangfireTenantStore = context.RequestServices.GetRequiredService<IHangfireTenantsStore>();
-                if (context.RequestServices.GetRequiredService<IHangfireTenantIdentificationStrategy>().TryIdentifyTenant(out var tenantId))
-                    return (await hangfireTenantStore.GetTenantByIdAsync(tenantId))?.DashboardOptions;
-                else
-                    return null;
-            }, async (context) =>
-            {
-                var hangfireTenantStore = context.RequestServices.GetRequiredService<IHangfireTenantsStore>();
-                if (context.RequestServices.GetRequiredService<IHangfireTenantIdentificationStrategy>().TryIdentifyTenant(out var tenantId))
-                    return (await hangfireTenantStore.GetTenantByIdAsync(tenantId))?.Storage;
-                else
-                    return null;
-            });
+            app.UseHangfireDashboardMultiTenant("/hangfire");
 
             app.UseMvc(routes =>
             {

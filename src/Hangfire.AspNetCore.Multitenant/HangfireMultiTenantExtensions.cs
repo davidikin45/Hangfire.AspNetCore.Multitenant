@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using Hangfire.Initialization;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Threading.Tasks;
 
@@ -15,12 +17,15 @@ namespace Hangfire.AspNetCore.Multitenant
         {
             return app.Use(async (context, next) =>
             {
-                var jobStorage = storage != null ? await storage(context) : null;
-                var dashboardOptions = options != null ? await options(context) : null;
+                options = options ?? ((context2) => Task.FromResult(context2.RequestServices.GetService<DashboardOptions>()));
+                storage = storage ?? ((context2) => Task.FromResult(context2.RequestServices.GetService<JobStorage>()));
+
+                var jobStorage = await storage(context);
+                var dashboardOptions = await options(context);
 
                 var middleware = app.New();
                 
-                if(jobStorage != null)
+                if(jobStorage != null && jobStorage.GetType() != typeof(NoopJobStorage))
                 {
                     middleware.UseHangfireDashboard(pathMatch, dashboardOptions, jobStorage);
                 }

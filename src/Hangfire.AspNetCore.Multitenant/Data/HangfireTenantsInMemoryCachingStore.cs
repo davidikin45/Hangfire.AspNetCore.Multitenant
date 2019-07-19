@@ -35,13 +35,13 @@ namespace Hangfire.AspNetCore.Multitenant.Data
                 foreach (var removedTenant in removedTenants)
                 {
                     _activeTenants.RemoveAll(t => t.Id == removedTenant.Id);
-                    OnTenantRemoved(removedTenant);
+                    await OnTenantRemoved(removedTenant);
                 }
 
                 foreach (var addedTenant in addedTenants)
                 {
                     _activeTenants.Add(addedTenant);
-                    OnTenantAdded(addedTenant);
+                    await OnTenantAdded(addedTenant);
                 }
 
                 return _activeTenants;
@@ -64,7 +64,7 @@ namespace Hangfire.AspNetCore.Multitenant.Data
             return tenant;
         }
 
-        public abstract void OnTenantAdded(HangfireTenant newTenant);
-        public abstract void OnTenantRemoved(HangfireTenant removedTenant);
+        public abstract Task OnTenantAdded(HangfireTenant newTenant);
+        public abstract Task OnTenantRemoved(HangfireTenant removedTenant);
     }
 }

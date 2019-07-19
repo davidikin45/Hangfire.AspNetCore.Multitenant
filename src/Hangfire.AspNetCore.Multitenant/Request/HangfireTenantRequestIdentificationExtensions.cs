@@ -1,5 +1,6 @@
 ﻿using Autofac.Multitenant;
 using Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,9 +11,9 @@ namespace Hangfire.AspNetCore.Multitenant.Request
 {
     public static class HangfireTenantRequestIdentificationBuilderExtensions
     {
-        public static IServiceCollection DynamicTenant(this HangfireTenantRequestIdentificationBuilder identification, Func<HttpContext, HangfireTenant> currentTenant, Func<IEnumerable<HangfireTenant>> allTenants)
+        public static IServiceCollection DynamicTenant(this HangfireTenantRequestIdentificationBuilder identification, Func<IHostingEnvironment, HttpContext, HangfireTenant> currentTenant, Func<IHostingEnvironment, IEnumerable<HangfireTenant>> allTenants)
         {
-            identification._services.AddScoped<IHangfireTenantIdentificationStrategy>(sp => new DynamicTenantIdentificationService(sp.GetRequiredService<IHttpContextAccessor>(), sp.GetRequiredService<ILogger<IHangfireTenantIdentificationStrategy>>(), currentTenant, allTenants));
+            identification._services.AddScoped<IHangfireTenantIdentificationStrategy>(sp => new DynamicTenantIdentificationService(sp.GetRequiredService<IHttpContextAccessor>(), sp.GetRequiredService<IHostingEnvironment>(), sp.GetRequiredService<ILogger<IHangfireTenantIdentificationStrategy>>(), currentTenant, allTenants));
             return identification._services.AddScoped<ITenantIdentificationStrategy>(sp => sp.GetRequiredService<IHangfireTenantIdentificationStrategy>());
         }
 

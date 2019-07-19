@@ -1,6 +1,5 @@
-﻿using Hangfire.AspNetCore.Multitenant;
-using Hangfire.AspNetCore.Multitenant.Data;
-using Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies;
+﻿using Hangfire.AspNetCore.Multitenant.Data;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
@@ -11,12 +10,14 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
     {
         private readonly ILogger<IHangfireTenantIdentificationStrategy> _logger;
         private readonly IHttpContextAccessor _contextAccessor;
+        private readonly IHostingEnvironment _hostingEnvironment;
         private readonly IHangfireTenantsStore _store;
 
-        public QueryStringIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, ILogger<IHangfireTenantIdentificationStrategy> logger)
+        public QueryStringIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, IHostingEnvironment hostingEnvironment, ILogger<IHangfireTenantIdentificationStrategy> logger)
         {
             _store = store;
             _contextAccessor = contextAccessor;
+            _hostingEnvironment = hostingEnvironment;
             _logger = logger;
         }
 
@@ -38,7 +39,7 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
                 var tenant = await _store.GetTenantByIdAsync(tenantId);
                 if (tenant != null)
                 {
-                    if (tenant.IpAddressAllowed(ip))
+                    if (tenant.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).IpAddressAllowed(ip))
                     {
                         TenantId = tenant.Id;
                         _logger.LogInformation("Identified tenant: {tenant} from query string", tenant.Id);
