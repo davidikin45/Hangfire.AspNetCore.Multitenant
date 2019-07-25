@@ -453,4 +453,4 @@ This project is licensed under the MIT License
 * [Hangfire](https://www.hangfire.io/)
 * [Autofac Multitenant](https://autofaccn.readthedocs.io/en/latest/advanced/multitenant.html)
 * [Writing Multitenant ASP.NET Core Applications](https://stackify.com/writing-multitenant-asp-net-core-applications/)
-* [Queue per Microservice][(https://discuss.hangfire.io/t/one-queue-for-the-whole-farm-and-one-queue-by-server/490/2)
+* [Queue per Microservice](https://discuss.hangfire.io/t/one-queue-for-the-whole-farm-and-one-queue-by-server/490/2)
