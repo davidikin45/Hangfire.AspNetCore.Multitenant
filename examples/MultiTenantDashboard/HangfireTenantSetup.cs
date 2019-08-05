@@ -1,68 +1,43 @@
 ﻿using Autofac.Extensions.DependencyInjection;
 using Autofac.Multitenant;
 using Hangfire;
+using Hangfire.AspNetCore.Extensions;
 using Hangfire.AspNetCore.Multitenant;
 using Hangfire.AspNetCore.Multitenant.Data;
 using Hangfire.Common;
 using Hangfire.Initialization;
 using Hangfire.Server;
+using Hangfire.States;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace MultiTenantDashboard
 {
-    public class HangfireTenantsStore : HangfireTenantsInMemoryStore
+    public class HangfireTenantSetup : IHangfireTenantSetup
     {
         private readonly IServiceProvider _serviceProvider;
-
-        public HangfireTenantsStore(IServiceProvider serviceProvider)
+        private readonly ILogger _logger;
+        public HangfireTenantSetup(IServiceProvider serviceProvider, ILogger<HangfireTenantSetup> logger)
         {
             _serviceProvider = serviceProvider;
-            CacheExpiryMinutes = 1;
+            _logger = logger;
         }
 
-        public override async Task InitializeTenantsAsync()
-        {
-            //Server=(localdb)\\mssqllocaldb;Database=HangfireDatabase;Trusted_Connection=True;MultipleActiveResultSets=true; will use an SQLServer database.
-            //"" will start a new hangfire server in memory.
-            //Data Source=tenant1.db; will start a new SQLite hangfire server.
-            //Data Source=:memory:; will start a new SQLite InMemory hangfire server.
-            //null will mean tenant does not get a hangfire server.
-
-            var sharedConnectionString = "Server=(localdb)\\mssqllocaldb;Database=HangfireMultitenant;Trusted_Connection=True;MultipleActiveResultSets=true;";
-            //var sharedConnectionString = "Data Source=:memory:;";
-            //var sharedConnectionString = "";
-
-            Tenants = new List<HangfireTenant>(){
-                new HangfireTenant(){ Id ="tenant0", HostNames = new string []{ "" }, DbInitialiation = DbInitialiation.EnsureTablesDeletedThenEnsureDbAndTablesCreated, HangfireConnectionString = sharedConnectionString, HangfireSchemaName ="tenant0"}
-                .AddEnvionment("production", c => {c.HangfireConnectionString = "Data Source=tenant0.db;"; c.DbInitialiation = DbInitialiation.EnsureDbAndTablesCreatedAndHeavyMigrations; })
-                };
-
-            int tenantCount = 20;
-            for (int i = 1; i <= tenantCount; i++)
-            {
-                Tenants.Add(new HangfireTenant() { Id = $"tenant{i}", HostNames = new string[] { $"tenant{i}.*" }, DbInitialiation = DbInitialiation.EnsureTablesDeletedThenEnsureDbAndTablesCreated, HangfireConnectionString = sharedConnectionString, HangfireSchemaName = $"tenant{i}" }
-                .AddEnvionment("production", c => { c.HangfireConnectionString = $"Data Source=tenant{i}.db;"; c.DbInitialiation = DbInitialiation.EnsureDbAndTablesCreatedAndHeavyMigrations; }));
-            }
-
-            await base.InitializeTenantsAsync();
-        }
-
-        public override async Task OnTenantAdded(HangfireTenant tenant)
+        public async Task OnTenantAdded(HangfireTenant tenant)
         {
             var multitenantContainer = _serviceProvider.GetRequiredService<MultitenantContainer>();
             var services = new AutofacServiceProvider(multitenantContainer);
-            var hangfireServicesAdded = _serviceProvider.GetService<IGlobalConfiguration>() != null;
+            var hangfireServicesAdded = services.GetService<IGlobalConfiguration>() != null;
 
-            var configuration = _serviceProvider.GetRequiredService<IConfiguration>();
-            var environment = _serviceProvider.GetRequiredService<IHostingEnvironment>();
-            var applicationLifetime = _serviceProvider.GetRequiredService<IApplicationLifetime>();
+            var configuration = services.GetRequiredService<IConfiguration>();
+            var environment = services.GetRequiredService<IHostingEnvironment>();
+            var applicationLifetime = services.GetRequiredService<IApplicationLifetime>();
 
             var tenantConfigurations = services.GetServices<IHangfireTenantConfiguration>();
 
@@ -77,7 +52,7 @@ namespace MultiTenantDashboard
 
             if (tenantInitializer != null)
             {
-                tenantInitializer.ConfigureServices(tenant, tenantServices, configuration, environment);
+                tenantInitializer.ConfigureServices(tenant, tenantServices);
                 tenantInitializer.ConfigureHangfireDashboard(dashboardOptions);
             }
 
@@ -105,10 +80,12 @@ namespace MultiTenantDashboard
                 Func<IServiceProvider, IBackgroundProcessingServer> processingServerAccessor = ((sp) => processingServer);
                 tenantServices.AddSingleton(processingServerAccessor);
 
-                var backgroundServerOptions = services.GetService<BackgroundJobServerOptions>()?.Clone() ?? new BackgroundJobServerOptions() { ServerName = environmentConfig.HangfireServerName, Queues = new string[] { environmentConfig.HangfireServerName, "default" } };
+                var backgroundServerOptions = services.GetService<BackgroundJobServerOptions>()?.Clone() ?? new BackgroundJobServerOptions();
+
+                backgroundServerOptions.ServerName = environmentConfig.HangfireServerName ?? backgroundServerOptions.ServerName;
                 backgroundServerOptions.Activator = new MultiTenantJobActivator(multitenantContainer, tenant.Id);
                 backgroundServerOptions.FilterProvider = services.GetService<IJobFilterProvider>() ?? new JobFilterCollection();
-    
+
                 if (tenantInitializer != null)
                 {
                     tenantInitializer.ConfigureHangfireServer(backgroundServerOptions);
@@ -132,7 +109,7 @@ namespace MultiTenantDashboard
             {
                 if (tenantInitializer != null)
                 {
-                    await tenantInitializer.InitializeAsync(tenant, scope, configuration, environment);
+                    await tenantInitializer.InitializeAsync(tenant, scope);
                 }
 
                 if (newHangfireServer)
@@ -142,7 +119,7 @@ namespace MultiTenantDashboard
                     {
                         if (environmentConfig.DbInitialiation == DbInitialiation.PrepareSchemaIfNecessary)
                         {
-                            if(existingConnection == null)
+                            if (existingConnection == null)
                             {
                                 HangfireJobStorage.GetJobStorage(environmentConfig.HangfireConnectionString, options => {
                                     options.PrepareSchemaIfNecessary = true;
@@ -161,7 +138,7 @@ namespace MultiTenantDashboard
                                 });
                             }
                         }
-                        else if(environmentConfig.DbInitialiation == DbInitialiation.PrepareSchemaIfNecessaryAndHeavyMigrations)
+                        else if (environmentConfig.DbInitialiation == DbInitialiation.PrepareSchemaIfNecessaryAndHeavyMigrations)
                         {
                             if (existingConnection == null)
                             {
@@ -230,7 +207,7 @@ namespace MultiTenantDashboard
                         }
                         else if (environmentConfig.DbInitialiation == DbInitialiation.EnsureDbAndTablesCreatedAndHeavyMigrations)
                         {
-                            if(existingConnection == null)
+                            if (existingConnection == null)
                             {
                                 await HangfireInitializer.EnsureDbAndTablesCreatedAsync(environmentConfig.HangfireConnectionString, options => {
                                     options.PrepareSchemaIfNecessary = true;
@@ -251,7 +228,7 @@ namespace MultiTenantDashboard
 
                     if (tenantInitializer != null)
                     {
-                        tenantInitializer.ConfigureHangfireJobs(scope.GetRequiredService<IRecurringJobManager>(), configuration, environment);
+                        tenantInitializer.ConfigureHangfireJobs(scope.GetRequiredService<IRecurringJobManager>());
                     }
 
                     var additionalProcesses = scope.GetServices<IBackgroundProcess>();
@@ -261,9 +238,20 @@ namespace MultiTenantDashboard
                     processingServer = serverDetails.Server;
                 }
             }
+
+            _logger.LogInformation($"Tenant {tenant.Id} Initialized");
+        }
+        public async Task OnTenantUpdated(HangfireTenant updatedTenant, HangfireTenant oldTenant)
+        {
+            //If connection string changes restart server.
+            if (oldTenant.DefaultConfig.HangfireConnectionString != updatedTenant.DefaultConfig.HangfireConnectionString)
+            {
+                await OnTenantRemoved(updatedTenant);
+                await OnTenantAdded(updatedTenant);
+            }
         }
 
-        public override Task OnTenantRemoved(HangfireTenant tenant)
+        public Task OnTenantRemoved(HangfireTenant tenant)
         {
             var multitenantContainer = _serviceProvider.GetRequiredService<MultitenantContainer>();
             using (var scope = new AutofacServiceProvider(multitenantContainer.GetTenantScope(tenant.Id).BeginLifetimeScope()))
@@ -273,19 +261,9 @@ namespace MultiTenantDashboard
             }
 
             multitenantContainer.RemoveTenant(tenant.Id);
+
+            _logger.LogInformation($"Tenant {tenant.Id} Removed");
             return Task.CompletedTask;
         }
-
-        //C:\WINDOWS\system32\drivers\etc\hosts
-        //127.0.0.1 tenant1.localhost
-        //127.0.0.1 tenant2.localhost
-        //127.0.0.1 tenant3.localhost
-        //127.0.0.1 tenant4.localhost
-        //127.0.0.1 tenant5.localhost
-        //127.0.0.1 tenant6.localhost
-        //127.0.0.1 tenant7.localhost
-        //127.0.0.1 tenant8.localhost
-        //127.0.0.1 tenant9.localhost
-        //127.0.0.1 tenant10.localhost
     }
 }

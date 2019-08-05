@@ -1,29 +1,30 @@
-﻿using Hangfire.AspNetCore.Multitenant.Data;
+﻿using Autofac.Multitenant;
+using Hangfire.AspNetCore.Multitenant.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
 {
-    public class SourceIPIdentificationService : IHangfireTenantIdentificationStrategy
+    public class SourceIPIdentificationService : ITenantIdentificationStrategy
     {
-        private readonly ILogger<IHangfireTenantIdentificationStrategy> _logger;
+        private readonly ILogger<ITenantIdentificationStrategy> _logger;
         private readonly IHttpContextAccessor _contextAccessor;
         private readonly IHostingEnvironment _hostingEnvironment;
-        private readonly IHangfireTenantsStore _store;
+        private readonly IServiceProvider _serviceProvider;
 
-        public SourceIPIdentificationService(IHangfireTenantsStore store, IHttpContextAccessor contextAccessor, IHostingEnvironment hostingEnvironment, ILogger<IHangfireTenantIdentificationStrategy> logger)
+        public SourceIPIdentificationService(IHttpContextAccessor contextAccessor, IHostingEnvironment hostingEnvironment, ILogger<ITenantIdentificationStrategy> logger, IServiceProvider serviceProvider)
         {
-            _store = store;
             _contextAccessor = contextAccessor;
             _hostingEnvironment = hostingEnvironment;
             _logger = logger;
+            _serviceProvider = serviceProvider;
         }
-
-        public object TenantId { get; set; }
 
         public async Task<HangfireTenant> GetTenantAsync(HttpContext httpContext)
         {
@@ -41,7 +42,12 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
              || t.GetEnvironmentConfig(_hostingEnvironment.EnvironmentName).RequestIpAddresses.Where(i => i.StartsWith("*")).Any(i => ip.EndsWith(i.Replace("*", "")))
              );
 
-            var tenants = await _store.GetAllTenantsAsync();
+            IEnumerable<HangfireTenant> tenants;
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                var store = scope.ServiceProvider.GetRequiredService<IHangfireTenantsStore>();
+                tenants = await store.GetAllTenantsAsync();
+            }
 
             var filteredTenants = tenants.Where(whereClause).ToList();
 
@@ -49,24 +55,16 @@ namespace Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies
 
             if (tenant != null)
             {
-                TenantId = tenant.Id;
                 _logger.LogInformation("Identified tenant: {tenant} from ip: {ip}", tenant.Id, ip);
                 return tenant;
             }
 
-            TenantId = null;
             _logger.LogWarning("Unable to identify tenant from ip address.");
             return null;
         }
 
         public bool TryIdentifyTenant(out object tenantId)
         {
-            if (TenantId != null)
-            {
-                tenantId = TenantId;
-                return true;
-            }
-
             var httpContext = _contextAccessor.HttpContext;
 
             var tenant = GetTenantAsync(httpContext).GetAwaiter().GetResult();

@@ -23,9 +23,6 @@ namespace Hangfire.AspNetCore.Multitenant
         {
             var scope = _mtc.GetTenantScope(_tenantId).BeginLifetimeScope();
 
-            var tenantService = scope.Resolve<IHangfireTenantIdentificationStrategy>();
-            tenantService.TenantId = _tenantId;
-
             return new AspNetCoreMultiTenantJobActivatorScope(scope);
         }
 
@@ -34,9 +31,6 @@ namespace Hangfire.AspNetCore.Multitenant
 #pragma warning restore CS0672 // Member overrides obsolete member
         {
             var scope = _mtc.GetTenantScope(_tenantId).BeginLifetimeScope();
-
-            var tenantService = scope.Resolve<IHangfireTenantIdentificationStrategy>();
-            tenantService.TenantId = _tenantId;
 
             return new AspNetCoreMultiTenantJobActivatorScope(scope);
         }

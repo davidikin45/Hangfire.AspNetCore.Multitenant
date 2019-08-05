@@ -10,11 +10,20 @@ using System.Threading.Tasks;
 
 namespace MultiTenantDashboard.TenantConfiguration.Default
 {
-    public class Configuration : IHangfireTenantConfiguration
+    public class Config : IHangfireTenantConfiguration
     {
+        public IConfiguration Configuration { get; }
+        public IHostingEnvironment HostingEnvironment { get; }
+
+        public Config(IConfiguration configuration, IHostingEnvironment hostingEnvironment)
+        {
+            Configuration = configuration;
+            HostingEnvironment = hostingEnvironment;
+        }
+
         public object TenantId => "tenant0";
 
-        public void ConfigureServices(HangfireTenant tenant, IServiceCollection services, IConfiguration configuration, IHostingEnvironment hostingEnvironment)
+        public void ConfigureServices(HangfireTenant tenant, IServiceCollection services)
         {
             services.AddSingleton<IBackgroundProcess, BackgroundProcess>();
         }
@@ -28,12 +37,12 @@ namespace MultiTenantDashboard.TenantConfiguration.Default
             
         }
 
-        public Task InitializeAsync(HangfireTenant tenant, IServiceProvider scope, IConfiguration configuration, IHostingEnvironment hostingEnvironment)
+        public Task InitializeAsync(HangfireTenant tenant, IServiceProvider scope)
         {
             return Task.CompletedTask;
         }
 
-        public void ConfigureHangfireJobs(IRecurringJobManager recurringJobManager, IConfiguration configuration, IHostingEnvironment hostingEnvironment)
+        public void ConfigureHangfireJobs(IRecurringJobManager recurringJobManager)
         {
             recurringJobManager.AddOrUpdate("check-link", Job.FromExpression<Job1>(m => m.Execute()), Cron.Minutely(), new RecurringJobOptions());
             recurringJobManager.Trigger("check-link");

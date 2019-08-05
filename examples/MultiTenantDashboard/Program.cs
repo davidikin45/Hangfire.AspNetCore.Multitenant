@@ -1,8 +1,4 @@
-﻿using Autofac;
-using Autofac.AspNetCore.Extensions;
-using Autofac.Multitenant;
-using Hangfire;
-using Hangfire.AspNetCore.Multitenant;
+﻿using Autofac.AspNetCore.Extensions;
 using Hangfire.AspNetCore.Multitenant.Data;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
@@ -10,7 +6,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace MultiTenantDashboard
@@ -27,8 +22,9 @@ namespace MultiTenantDashboard
 
                 try
                 {
-                   var tenantStore = serviceProvider.GetRequiredService<IHangfireTenantsStore>();
-                   await tenantStore.InitializeTenantsAsync();
+                    var applicationLifetime = serviceProvider.GetRequiredService<IApplicationLifetime>();
+                    var tenantStore = serviceProvider.GetRequiredService<IHangfireTenantsStore>();
+                    await tenantStore.InitializeTenantsAsync(applicationLifetime.ApplicationStopping);
                 }
                 catch (Exception ex)
                 {

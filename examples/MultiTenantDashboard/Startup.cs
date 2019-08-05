@@ -1,11 +1,9 @@
 ﻿using Autofac;
 using Hangfire;
 using Hangfire.AspNetCore.Multitenant;
-using Hangfire.AspNetCore.Multitenant.Data;
 using Hangfire.AspNetCore.Multitenant.Request;
-using Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies;
 using Hangfire.Initialization;
-using Hangfire.MemoryStorage;
+using Hangfire.States;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -36,14 +34,30 @@ namespace MultiTenantDashboard
             });
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2)
-                .AddControllersAsServices();
+                .AddControllersAsServices()
+                .AddHangfireTenantViewLocations();
 
-            services.AddHangfireMultiTenantStore<HangfireTenantsStore>();
-            services.AddHangfireTenantRequestIdentification().TenantFromHostQueryStringSourceIP();
+            //Tenant Store
+            //services.AddHangfireMultiTenantStore<HangfireTenantsInMemory>();
+            services.AddHangfireMultiTenantStore<HangfireTenantsJson>();
+
+            //Tenant Setup
+            services.AddHangfireMultiTenantSetup<HangfireTenantSetup>();
+
+            //Tenant Configuration
             services.AddHangfireTenantConfiguration();
 
+            //Tenant Identification
+            services.AddHangfireTenantRequestIdentification().TenantFromHostQueryStringSourceIP();
+
+            //404 if no tenant identified
+            services.AddHangfireTenant404Middleware();
+
+
+            // -- Hangfire Setup --
+
             //Default dashboard options.
-            services.AddSingleton(new DashboardOptions()
+            services.AddSingleton(sp => new DashboardOptions()
             {
                 Authorization = new[] { new HangfireRoleAuthorizationfilter("admin") }
             });
@@ -57,6 +71,13 @@ namespace MultiTenantDashboard
 
                 config.UseFilter(new HangfireLoggerAttribute());
                 config.UseFilter(new HangfirePreserveOriginalQueueAttribute());
+            });
+
+            //Default Hangfire Server options
+            services.AddSingleton(sp => new BackgroundJobServerOptions()
+            {
+                ServerName ="web-background",
+                WorkerCount = 1 //Default  Math.Min(Environment.ProcessorCount * 5, 20);
             });
         }
 

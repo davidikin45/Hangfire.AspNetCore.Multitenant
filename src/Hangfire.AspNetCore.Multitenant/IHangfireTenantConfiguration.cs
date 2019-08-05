@@ -9,13 +9,13 @@ namespace Hangfire.AspNetCore.Multitenant
     public interface IHangfireTenantConfiguration
     {
         object TenantId { get; }
-        void ConfigureServices(HangfireTenant tenant, IServiceCollection services, IConfiguration configuration, IHostingEnvironment hostingEnvironment);
+        void ConfigureServices(HangfireTenant tenant, IServiceCollection services);
 
         void ConfigureHangfireDashboard(DashboardOptions options);
 
         void ConfigureHangfireServer(BackgroundJobServerOptions options);
 
-        Task InitializeAsync(HangfireTenant tenant, IServiceProvider scope, IConfiguration configuration, IHostingEnvironment hostingEnvironment);
-        void ConfigureHangfireJobs(IRecurringJobManager recurringJobManager, IConfiguration configuration, IHostingEnvironment hostingEnvironment);
+        Task InitializeAsync(HangfireTenant tenant, IServiceProvider scope);
+        void ConfigureHangfireJobs(IRecurringJobManager recurringJobManager);
     }
 }

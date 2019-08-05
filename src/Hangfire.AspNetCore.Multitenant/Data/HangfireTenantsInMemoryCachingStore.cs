@@ -1,7 +1,11 @@
 ﻿using LazyCache;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Hangfire.AspNetCore.Multitenant.Data
@@ -13,58 +17,110 @@ namespace Hangfire.AspNetCore.Multitenant.Data
         public virtual bool CachingEnabled { get; set; } = true;
         public virtual int CacheExpiryMinutes { get; set; } = 20;
 
-        public HangfireTenantsInMemoryCachingStore()
+        private readonly ILogger _logger;
+        private readonly IServiceProvider _serviceProvider;
+
+        public HangfireTenantsInMemoryCachingStore(ILogger logger, IServiceProvider serviceProvider)
         {
             _cache = new CachingService();
+            _logger = logger;
+            _serviceProvider = serviceProvider;
         }
-        public abstract Task<IEnumerable<HangfireTenant>> GetAllActiveTenantsFromStoreAsync();
+        public abstract Task<IEnumerable<HangfireTenant>> GetAllActiveTenantsFromStoreAsync(CancellationToken cancellationToken = default);
 
         private static List<HangfireTenant> _activeTenants = new List<HangfireTenant>();
-        public virtual async Task<IEnumerable<HangfireTenant>> GetAllTenantsAsync()
+        public virtual async Task<IEnumerable<HangfireTenant>> GetAllTenantsAsync(bool waitForInitialization = false, CancellationToken cancellationToken = default)
         {
             Func<Task<IEnumerable<HangfireTenant>>> getAllActiveTenantsFactory = async () => {
+                //Retrieve Active tenants from store.
+                var allTenants = (await GetAllActiveTenantsFromStoreAsync(cancellationToken).ConfigureAwait(false)).Where(t => t.Active);
 
-                var previousTenantIds = _activeTenants?.Select(t => t.Id) ?? Enumerable.Empty<string>();
-                var allTenants = (await GetAllActiveTenantsFromStoreAsync()).Where(t => t.Active);
-
-                var activeTenantIds = allTenants?.Select(t => t.Id) ?? Enumerable.Empty<string>();
-
-                var addedTenants = allTenants.Where(t => !previousTenantIds.Contains(t.Id));
-                var removedTenants = _activeTenants?.Where(t => !activeTenantIds.Contains(t.Id)) ?? Enumerable.Empty<HangfireTenant>();
-
-                foreach (var removedTenant in removedTenants)
+                Func<IServiceProvider, CancellationToken, Task> initializeTenants = async (serviceProvider, token) =>
                 {
-                    _activeTenants.RemoveAll(t => t.Id == removedTenant.Id);
-                    await OnTenantRemoved(removedTenant);
+                    var hangfireTenantSetup = serviceProvider.GetService<IHangfireTenantSetup>();
+
+                    if (hangfireTenantSetup != null)
+                    {
+                        var previousTenantIds = _activeTenants?.Select(t => t.Id) ?? Enumerable.Empty<string>();
+                        var activeTenantIds = allTenants?.Select(t => t.Id) ?? Enumerable.Empty<string>();
+
+                        var existingTenants = _activeTenants?.Where(t => activeTenantIds.Contains(t.Id)).ToList() ?? Enumerable.Empty<HangfireTenant>();
+                        var addedTenants = allTenants.Where(t => !previousTenantIds.Contains(t.Id)).ToList();
+                        var removedTenants = _activeTenants?.Where(t => !activeTenantIds.Contains(t.Id)).ToList() ?? Enumerable.Empty<HangfireTenant>();
+
+                        foreach (var removedTenant in removedTenants)
+                        {
+                            if (!token.IsCancellationRequested)
+                            {
+                                await hangfireTenantSetup.OnTenantRemoved(removedTenant).ConfigureAwait(false);
+                                _activeTenants.RemoveAll(t => t.Id == removedTenant.Id);
+                            }
+                        }
+
+                        foreach (var addedTenant in addedTenants)
+                        {
+                            if (!token.IsCancellationRequested)
+                            {
+                                await hangfireTenantSetup.OnTenantAdded(addedTenant).ConfigureAwait(false);
+                                _activeTenants.Add(addedTenant);
+                            }
+                        }
+
+                        foreach (var existingTenant in existingTenants)
+                        {
+                            if (!token.IsCancellationRequested)
+                            {
+                                var updatedTenant = allTenants.First(t => t.Id == existingTenant.Id);
+                                await hangfireTenantSetup.OnTenantUpdated(updatedTenant, existingTenant).ConfigureAwait(false);
+                                _activeTenants[_activeTenants.IndexOf(existingTenant)] = updatedTenant;
+                            }
+                        }
+                    }
+
+                    _logger.LogInformation($"Hangfire Initialization is complete");
+                };
+
+                if (waitForInitialization)
+                {
+                    await initializeTenants(_serviceProvider, cancellationToken).ConfigureAwait(false);
                 }
-
-                foreach (var addedTenant in addedTenants)
+                else
                 {
-                    _activeTenants.Add(addedTenant);
-                    await OnTenantAdded(addedTenant);
+                    var applicationLifetime = _serviceProvider.GetRequiredService<IApplicationLifetime>();
+                    var serviceScopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+                    _ = Task.Run(async () => {
+                        try
+                        {
+                            using(var scope = serviceScopeFactory.CreateScope())
+                            {
+                                await initializeTenants(scope.ServiceProvider, applicationLifetime.ApplicationStopping).ConfigureAwait(false);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"Hangfire Initialization Failed");
+                        }
+                    }, applicationLifetime.ApplicationStopping);
                 }
 
                 return _activeTenants;
             };
 
-            var retVal = await _cache.GetOrAddAsync("tenants", getAllActiveTenantsFactory, DateTimeOffset.Now.AddMinutes(CacheExpiryMinutes));
+            var retVal = await _cache.GetOrAddAsync("tenants", getAllActiveTenantsFactory, DateTimeOffset.Now.AddMinutes(CacheExpiryMinutes)).ConfigureAwait(false);
 
             return retVal;
         }
 
-        public virtual async Task InitializeTenantsAsync()
+        public virtual async Task InitializeTenantsAsync(CancellationToken cancellationToken = default)
         {
-            await GetAllTenantsAsync();
+            await GetAllTenantsAsync(true).ConfigureAwait(false); ;
         }
 
-        public virtual async Task<HangfireTenant> GetTenantByIdAsync(object id)
+        public virtual async Task<HangfireTenant> GetTenantByIdAsync(object id, CancellationToken cancellationToken = default)
         {
-            var allTenants = await GetAllTenantsAsync();
+            var allTenants = await GetAllTenantsAsync(false, cancellationToken).ConfigureAwait(false);
             var tenant = allTenants.FirstOrDefault(t => t.Id == id.ToString());
             return tenant;
         }
-
-        public abstract Task OnTenantAdded(HangfireTenant newTenant);
-        public abstract Task OnTenantRemoved(HangfireTenant removedTenant);
     }
 }

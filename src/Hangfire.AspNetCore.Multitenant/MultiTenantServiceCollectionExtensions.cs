@@ -1,5 +1,9 @@
 ﻿using Hangfire.AspNetCore.Multitenant.Data;
+using Hangfire.AspNetCore.Multitenant.Middleware;
+using Hangfire.AspNetCore.Multitenant.Mvc;
 using Hangfire.AspNetCore.Multitenant.Request;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Razor;
 using Microsoft.Extensions.DependencyInjection;
 using System.Linq;
 using System.Reflection;
@@ -23,6 +27,16 @@ namespace Hangfire.AspNetCore.Multitenant
         where TTenantStore : class, IHangfireTenantsStore
         {
             services.Add(new ServiceDescriptor(typeof(IHangfireTenantsStore), typeof(TTenantStore), contextLifetime));
+            return services;
+        }
+
+        /// <summary>
+        /// Adds the hangfire multi tenant setup to the application.
+        /// </summary>
+        public static IServiceCollection AddHangfireMultiTenantSetup<TTenantSetup>(this IServiceCollection services, ServiceLifetime contextLifetime = ServiceLifetime.Scoped)
+        where TTenantSetup : class, IHangfireTenantSetup
+        {
+            services.Add(new ServiceDescriptor(typeof(IHangfireTenantSetup), typeof(TTenantSetup), contextLifetime));
             return services;
         }
 
@@ -51,6 +65,16 @@ namespace Hangfire.AspNetCore.Multitenant
         {
             var target = Assembly.GetCallingAssembly();
             return services.AddHangfireTenantConfiguration(target);
+        }
+
+        //Addition to AppStartup.Configure for configuring Request Pipeline
+        //https://andrewlock.net/exploring-istartupfilter-in-asp-net-core/
+        /// <summary>
+        /// Adds the hangfire tenant 404 middleware.
+        /// </summary>
+        public static IServiceCollection AddHangfireTenant404Middleware(this IServiceCollection services)
+        {
+            return services.AddSingleton<IStartupFilter, HangfireTenant404StartupFilter>();
         }
     }
 }
