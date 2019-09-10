@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFrameworks>netstandard2.0;netcoreapp3.0</TargetFrameworks>
     <Authors>David Ikin</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/davidikin45/Hangfire.AspNetCore.Multitenant</PackageProjectUrl>
@@ -10,8 +10,8 @@
     <PackageTags>Hangfire Multitenant</PackageTags>
     <Copyright>(c) David Ikin</Copyright>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <Version>1.2.0</Version>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,6 +29,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor" Version="2.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Razor" Version="2.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Routing" Version="2.2.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>
