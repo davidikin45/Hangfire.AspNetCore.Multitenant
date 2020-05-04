@@ -2,7 +2,6 @@
 using Autofac.Extensions.DependencyInjection;
 using Autofac.Multitenant;
 using Hangfire.Annotations;
-using Hangfire.AspNetCore.Multitenant.Request.IdentificationStrategies;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 

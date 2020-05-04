@@ -1,0 +1,20 @@
+﻿Server=(localdb)\\mssqllocaldb;Database=HangfireDatabase;Trusted_Connection=True;MultipleActiveResultSets=true; will use an SQLServer database.
+"" will start a new hangfire server in memory.
+Data Source=tenant1.db; will start a new SQLite hangfire server.
+Data Source=:memory:; will start a new SQLite InMemory hangfire server.
+
+None
+PrepareSchemaIfNecessary
+PrepareSchemaIfNecessaryAndHeavyMigrations
+EnsureTablesDeletedThenEnsureDbAndTablesCreated
+EnsureDbAndTablesCreated
+EnsureDbAndTablesCreatedAndHeavyMigrations
+
+Kestral is good for testing multitenant apps as localhost subdomains works without needing to modify hosts file. By default appsettings.json "AllowedHosts": "*".
+If using IIS Express will need to update hosts file.
+C:\WINDOWS\system32\drivers\etc\hosts
+127.0.0.1 tenant1.localhost
+127.0.0.1 tenant2.localhost
+127.0.0.1 tenant3.localhost
+127.0.0.1 tenant4.localhost
+127.0.0.1 tenant5.localhost
